@@ -1,5 +1,5 @@
 -- ============================================================================
--- DISK - CONFIGURATION & ABILITIES
+-- DISK - CONFIGURATION & ABILITIES (v1.0.3)
 -- ============================================================================
 local modname = core.get_current_modname()
 
@@ -8,6 +8,7 @@ local CONFIG = {
     bounce_damage_bonus = 1.5,
     speed = 26,                 -- Initial throw speed
     return_speed = 30,          -- Homing return speed
+    blade_hit_radius = 0.50,    -- Physical blade width around the disk center for grazing hits!
     gravity = -3.5,             -- Slight gravity arc over long distances
     air_drag = 0.985,           -- Gradual momentum loss in air
     bounce_speed_keep = 0.82,   -- Keeps 82% speed per bounce until momentum runs out
@@ -26,51 +27,53 @@ local CONFIG = {
 
 local WEAR_UNIT = math.floor(65535 / CONFIG.max_uses)
 local is_mcl = core.get_modpath("mcl_core") ~= nil
+local has_dye = core.get_modpath("dye") ~= nil or core.get_modpath("mcl_dye") ~= nil
 
 -- ============================================================================
--- UPGRADE COSTS & MATERIALS (Cross-Game Support)
+-- UPGRADE COSTS & MATERIALS (Cross-Game Mineclonia & Minetest Game Support)
 -- ============================================================================
 local mat_iron = is_mcl and "mcl_core:iron_ingot" or "default:steel_ingot"
 local mat_gold = is_mcl and "mcl_core:gold_ingot" or "default:gold_ingot"
-local mat_redstone = is_mcl and "mcl_core:redstone" or "default:copper_ingot"
-local dye_red = is_mcl and "mcl_dye:red" or "dye:red"
-local dye_blue = is_mcl and "mcl_dye:blue" or "dye:blue"
-local dye_yellow = is_mcl and "mcl_dye:yellow" or "dye:yellow"
-local dye_green = is_mcl and "mcl_dye:green" or "dye:green"
-local dye_black = is_mcl and "mcl_dye:black" or "dye:black"
+local mat_redstone = is_mcl and "mcl_core:redstone" or (core.registered_items["default:mese_crystal"] and "default:mese_crystal" or "default:copper_ingot")
 
-local snd_throw = is_mcl and "mcl_throwing_throw" or "default_place_node_hard"
+local dye_red    = is_mcl and "mcl_dye:red"    or (has_dye and "dye:red"    or mat_iron)
+local dye_blue   = is_mcl and "mcl_dye:blue"   or (has_dye and "dye:blue"   or mat_iron)
+local dye_yellow = is_mcl and "mcl_dye:yellow" or (has_dye and "dye:yellow" or mat_iron)
+local dye_green  = is_mcl and "mcl_dye:green"  or (has_dye and "dye:green"  or mat_iron)
+local dye_black  = is_mcl and "mcl_dye:black"  or (has_dye and "dye:black"  or mat_iron)
+
+local snd_throw  = is_mcl and "mcl_throwing_throw" or "default_place_node_hard"
 local snd_bounce = is_mcl and "mcl_sounds_place_stone" or "default_dig_cracky"
-local snd_break = "default_tool_breaks"
+local snd_break  = "default_tool_breaks"
 
 local UPGRADE_COSTS = {
-    shape_chakram =  {item = mat_iron, count = 1, label = "(1x Iron)"},
-    shape_shield =   {item = mat_iron, count = 3, label = "(3x Iron)"},
-    shape_sawtooth = {item = mat_iron, count = 2, label = "(2x Iron)"},
-    shape_star =     {item = mat_iron, count = 2, label = "(2x Iron)"},
+    shape_chakram  = {item = mat_iron, count = 1, label = is_mcl and "(1x Iron)" or "(1x Steel)"},
+    shape_shield   = {item = mat_iron, count = 3, label = is_mcl and "(3x Iron)" or "(3x Steel)"},
+    shape_sawtooth = {item = mat_iron, count = 2, label = is_mcl and "(2x Iron)" or "(2x Steel)"},
+    shape_star     = {item = mat_iron, count = 2, label = is_mcl and "(2x Iron)" or "(2x Steel)"},
 
-    core_open =      {item = "", count = 0, label = "(Free)"},
-    core_cross =     {item = mat_iron, count = 4, label = "(4x Iron)"},
-    core_star =      {item = mat_gold, count = 2, label = "(2x Gold)"},
-    core_tech =      {item = mat_redstone, count = 3, label = is_mcl and "(3x Redstone)" or "(3x Copper)"},
+    core_open  = {item = "", count = 0, label = "(Free)"},
+    core_cross = {item = mat_iron, count = 4, label = is_mcl and "(4x Iron)" or "(4x Steel)"},
+    core_star  = {item = mat_gold, count = 2, label = "(2x Gold)"},
+    core_tech  = {item = mat_redstone, count = 3, label = is_mcl and "(3x Redstone)" or "(3x Mese/Copper)"},
 
-    col_steel =      {item = "", count = 0, label = "(Free)"},
-    col_crimson =    {item = dye_red, count = 1, label = "(1x Red Dye)"},
-    col_cobalt =     {item = dye_blue, count = 1, label = "(1x Blue Dye)"},
-    col_gold =       {item = dye_yellow, count = 1, label = "(1x Ylw Dye)"},
-    col_emerald =    {item = dye_green, count = 1, label = "(1x Grn Dye)"},
-    col_void =       {item = dye_black, count = 1, label = "(1x Blk Dye)"},
+    col_steel   = {item = "", count = 0, label = "(Free)"},
+    col_crimson = {item = dye_red,    count = 1, label = "(1x Red Dye)"},
+    col_cobalt  = {item = dye_blue,   count = 1, label = "(1x Blue Dye)"},
+    col_gold    = {item = dye_yellow, count = 1, label = "(1x Ylw Dye)"},
+    col_emerald = {item = dye_green,  count = 1, label = "(1x Grn Dye)"},
+    col_void    = {item = dye_black,  count = 1, label = "(1x Blk Dye)"},
 }
 
 -- ============================================================================
--- NODE HELPERS (FORGE, BREAKABLE & REDSTONE DETECTION)
+-- NODE HELPERS (FORGE, BREAKABLE & REDSTONE / MESECONS DETECTION)
 -- ============================================================================
 local function is_forge_node(nodename)
     if not nodename then return false end
     if is_mcl then
         return nodename:find("mcl_anvils:anvil") ~= nil
     else
-        return nodename == "default:steelblock" or nodename == "default:furnace" or nodename:find("anvil") ~= nil
+        return nodename == "default:steelblock" or nodename == "default:furnace" or nodename == "default:furnace_active" or nodename:find("anvil") ~= nil
     end
 end
 
@@ -87,19 +90,25 @@ local function is_breakable_node(nodename)
     return false
 end
 
-local function trigger_redstone_node(pos, player, pointed)
+local function trigger_redstone_node(pos, player, pointed, disk_ent)
     local node = core.get_node(pos)
     local def = core.registered_nodes[node.name]
     if not def then return end
 
     if def._on_arrow_hit then
-        def._on_arrow_hit(pos, {object = player})
+        local fake_arrow = {
+            object = (disk_ent and disk_ent.object) or player,
+            _stuckin = pos,
+            _shooter = player,
+        }
+        pcall(def._on_arrow_hit, pos, fake_arrow)
+        return
     end
-    if def.on_rightclick and (node.name:find("button") or node.name:find("lever") or node.name:find("wallswitch")) then
-        def.on_rightclick(pos, node, player, ItemStack(""), pointed)
-    end
-    if def.on_punch and (node.name:find("target") or node.name:find("button")) then
-        def.on_punch(pos, node, player, pointed)
+
+    if def.on_rightclick and (node.name:find("button") or node.name:find("lever") or node.name:find("wallswitch") or node.name:find("switch")) then
+        pcall(def.on_rightclick, pos, node, player, ItemStack(""), pointed)
+    elseif def.on_punch and (node.name:find("target") or node.name:find("button") or node.name:find("switch")) then
+        pcall(def.on_punch, pos, node, player, pointed)
     end
 end
 
@@ -122,15 +131,15 @@ local COLORS = {
 }
 
 local BLUEPRINTS = {
-    shape_chakram =  "Agile (Shape): +2 Max Wall Bounces and 20% faster flight speed.",
-    shape_shield =   "Heavy Shield (Shape): Sneak + Left-Click to Shield-Bash & Parry arrows! Double knockback.",
+    shape_chakram  = "Agile (Shape): +2 Max Wall Bounces and 20% faster flight speed.",
+    shape_shield   = "Heavy Shield (Shape): Sneak + Left-Click to Shield-Bash & Parry arrows! Double knockback.",
     shape_sawtooth = "Grinder (Shape): Deals +2 Bleed damage on contact, losing 15% speed when slicing flesh.",
-    shape_star =     "Piercer (Shape): Slices through enemies with zero speed loss.",
+    shape_star     = "Piercer (Shape): Slices through enemies with zero speed loss.",
 
-    core_open =      "Lightweight (Core): Minimal air drag—flies much farther before losing momentum.",
-    core_cross =     "Smasher (Core): Hitting a solid wall triggers a 3x3 shockwave, damaging nearby mobs.",
-    core_star =      "Loyal (Core): Automatically returns to your hand after sticking, slicing enemies on the way back!",
-    core_tech =      "Recall & Magnet (Core): Right-Click anytime after throwing to recall Disk to your hand! 3x Loot Magnet."
+    core_open  = "Lightweight (Core): Minimal air drag—flies much farther before losing momentum.",
+    core_cross = "Smasher (Core): Hitting a solid wall triggers a 3x3 shockwave, damaging nearby mobs.",
+    core_star  = "Loyal (Core): Automatically returns to your hand after sticking, slicing enemies on the way back!",
+    core_tech  = "Recall & Magnet (Core): Right-Click anytime after throwing to recall Disk to your hand! 3x Loot Magnet."
 }
 
 local function get_color_def(id)
@@ -241,7 +250,7 @@ local function fx_flight_trail(pos, hex_color, core_type, time_offset, high_mome
 end
 
 -- ============================================================================
--- PROJECTILE PARRY & SHIELD BASH
+-- PROJECTILE PARRY & UNIVERSAL DAMAGE HELPER
 -- ============================================================================
 local function is_projectile_entity(ent)
     if not ent or not ent.name or ent.name == modname .. ":flying_disk" or ent.name == "__builtin:item" then return false end
@@ -261,10 +270,59 @@ local function deflect_projectile(obj, deflector_pos)
     core.sound_play(snd_bounce, {pos = obj:get_pos(), gain = 1.0, pitch = 1.6}, true)
 end
 
+-- Universal damage function: Uses mcl_util.deal_damage in Mineclonia (like Trident) + punch fallback!
+local function damage_target(target_obj, player, disk_obj, dmg, dir_norm, kb)
+    local ent = target_obj:get_luaentity()
+
+    if is_mcl and mcl_util and mcl_util.deal_damage and mcl_damage then
+        local mcl_reason = {
+            type = "trident",
+            source = player,
+            direct = disk_obj,
+        }
+        mcl_damage.finish_reason(mcl_reason)
+        mcl_util.deal_damage(target_obj, dmg, mcl_reason)
+
+        if ent and ent.is_mob and ent.projectile_knockback then
+            ent:projectile_knockback(math.max(1, math.floor(kb / 3)), dir_norm)
+        else
+            target_obj:add_velocity({x = dir_norm.x * kb, y = 2.0, z = dir_norm.z * kb})
+        end
+    else
+        -- Minetest Game / Standard LuaEntity Punch
+        if player then
+            target_obj:punch(player, 1.0, {
+                full_punch_interval = 1.0,
+                damage_groups = {fleshy = dmg},
+            }, vector.multiply(dir_norm, kb))
+        end
+        target_obj:add_velocity({x = dir_norm.x * kb, y = 1.5, z = dir_norm.z * kb})
+    end
+end
+
+-- Checks if a 3D point (with blade radius) intersects an entity's collisionbox
+local function disk_intersects_entity(disk_pos, obj, blade_radius)
+    local opos = obj:get_pos()
+    if not opos then return false end
+    local props = obj:get_properties()
+    local cbox = (props and props.collisionbox) or {-0.4, -0.5, -0.4, 0.4, 1.5, 0.4}
+
+    local min_x = opos.x + cbox[1] - blade_radius
+    local min_y = opos.y + cbox[2] - 0.25
+    local min_z = opos.z + cbox[3] - blade_radius
+    local max_x = opos.x + cbox[4] + blade_radius
+    local max_y = opos.y + cbox[5] + 0.25
+    local max_z = opos.z + cbox[6] + blade_radius
+
+    return (disk_pos.x >= min_x and disk_pos.x <= max_x)
+       and (disk_pos.y >= min_y and disk_pos.y <= max_y)
+       and (disk_pos.z >= min_z and disk_pos.z <= max_z)
+end
+
 -- ============================================================================
 -- TRACKING THROWN DISKS FOR TECH CORE RIGHT-CLICK RECALL
 -- ============================================================================
-local player_disks = {} -- [player_name] = {ent1, ent2, ...}
+local player_disks = {}
 
 local function register_active_disk(pname, ent)
     if not pname then return end
@@ -281,10 +339,10 @@ local function recall_tech_disks(player)
     for i = #list, 1, -1 do
         local ent = list[i]
         if ent and ent.object and ent.object:get_pos() then
-            -- Tech Core allows manual Right-Click Recall at any time (flying or stuck!)
             if ent.core_type == "tech" and not ent.returning then
                 ent.stuck = false
                 ent.returning = true
+                ent.hit_mobs = {}
                 core.sound_play(snd_throw, {pos = player:get_pos(), gain = 0.8, pitch = 1.5}, true)
                 recalled = true
             end
@@ -296,7 +354,7 @@ local function recall_tech_disks(player)
 end
 
 -- ============================================================================
--- 3D FLYING & STICKING DISK ENTITY (TRIDENT PERSISTENCE + LOYALTY + TECH RECALL)
+-- 3D FLYING & STICKING DISK ENTITY
 -- ============================================================================
 core.register_entity(modname .. ":flying_disk", {
     initial_properties = {
@@ -306,7 +364,7 @@ core.register_entity(modname .. ":flying_disk", {
         physical = false,
         pointable = false,
         glow = 5,
-        static_save = true, -- Saves like a Trident so you never lose your disk!
+        static_save = true,
     },
     thrower_name = nil,
     _itemstack_str = "",
@@ -325,7 +383,6 @@ core.register_entity(modname .. ":flying_disk", {
     spin_yaw = 0,
     time_alive = 0,
 
-    -- Enchantment Hooks
     ench_sharpness = 0,
     ench_unbreaking = 0,
     ench_knockback = 0,
@@ -376,8 +433,12 @@ core.register_entity(modname .. ":flying_disk", {
 
                 local stack = ItemStack(self._itemstack_str)
                 if not stack:is_empty() then
+                    local w_name = stack:get_name()
+                    if not core.registered_items[w_name] then
+                        w_name = w_name:gsub("_enchanted$", "")
+                    end
                     self.object:set_properties({
-                        wield_item = stack:get_name(),
+                        wield_item = w_name,
                         glow = (self.core_type == "tech") and 14 or 5
                     })
                 end
@@ -409,7 +470,6 @@ core.register_entity(modname .. ":flying_disk", {
         self.ench_impaling = ench_data.impaling or 0
         self.loyalty_level = ench_data.loyalty or 0
 
-        -- Star Core also grants automatic Loyalty return!
         if self.core_type == "star" and self.loyalty_level == 0 then
             self.loyalty_level = 2
         end
@@ -418,8 +478,12 @@ core.register_entity(modname .. ":flying_disk", {
         self.vel = vector.multiply(dir, start_speed)
 
         self.object:set_velocity(self.vel)
+        local w_name = stack:get_name()
+        if not core.registered_items[w_name] then
+            w_name = w_name:gsub("_enchanted$", "")
+        end
         self.object:set_properties({
-            wield_item = stack:get_name(),
+            wield_item = w_name,
             glow = (self.core_type == "tech") and 14 or 5
         })
         self.object:set_rotation({x = math.pi / 2, y = 0, z = 0})
@@ -427,7 +491,7 @@ core.register_entity(modname .. ":flying_disk", {
     end,
 
     add_disk_wear = function(self, amount)
-        if not self._collectable then return end
+        if not self._collectable then return false end
         local stack = ItemStack(self._itemstack_str)
         local final_wear = math.floor(amount / (self.ench_unbreaking + 1))
         stack:add_wear(final_wear)
@@ -444,7 +508,6 @@ core.register_entity(modname .. ":flying_disk", {
         local ppos = player:get_pos()
         local inv = player:get_inventory()
 
-        -- Deliver any momentum-carried loot items
         for _, item_obj in pairs(self.carried_items) do
             if item_obj and item_obj:get_pos() then
                 local ent = item_obj:get_luaentity()
@@ -468,7 +531,6 @@ core.register_entity(modname .. ":flying_disk", {
 
         local stack = ItemStack(self._itemstack_str)
         if inv then
-            -- If main hand is empty, put it right back into the hand!
             local wield = player:get_wielded_item()
             if wield:is_empty() then
                 player:set_wielded_item(stack)
@@ -502,6 +564,63 @@ core.register_entity(modname .. ":flying_disk", {
         end
     end,
 
+    -- NEW: Sweeps the full width of the spinning disk along its flight step so grazing hits always deal damage!
+    check_wide_blade_hits = function(self, pos1, pos2, player, is_return_flight)
+        local seg = vector.subtract(pos2, pos1)
+        local dist = vector.length(seg)
+        local steps = math.max(1, math.ceil(dist / 0.35))
+        local dir_norm = (dist > 0.001) and vector.normalize(seg) or {x = 0, y = 0, z = 1}
+
+        for s = 0, steps do
+            local t = (steps == 0) and 0 or (s / steps)
+            local sample_pos = vector.add(pos1, vector.multiply(seg, t))
+
+            for _, obj in ipairs(core.get_objects_inside_radius(sample_pos, 2.5)) do
+                if obj ~= self.object and obj ~= player then
+                    local ent = obj:get_luaentity()
+                    if is_projectile_entity(ent) then
+                        if CONFIG.parry_projectiles and vector.distance(sample_pos, obj:get_pos()) <= 1.4 then
+                            deflect_projectile(obj, sample_pos)
+                        end
+                    elseif not (ent and (ent.name == "__builtin:item" or ent.name == modname .. ":flying_disk" or ent.name == "mcl_tridents:trident_clip")) then
+                        -- Check if the wide blade ring intersects the mob's 3D bounding box!
+                        if disk_intersects_entity(sample_pos, obj, CONFIG.blade_hit_radius) then
+                            local id = tostring(obj)
+                            if not self.hit_mobs[id] then
+                                self.hit_mobs[id] = true
+
+                                local dmg = CONFIG.base_damage
+                                    + (is_return_flight and 0 or math.floor(self.bounces * CONFIG.bounce_damage_bonus))
+                                    + (self.ench_sharpness * 1.5)
+                                    + (self.ench_impaling * 2.0)
+
+                                if not is_return_flight then
+                                    if self.shape_type == "sawtooth" then
+                                        dmg = dmg + 2
+                                        self.vel = vector.multiply(self.vel, 0.85)
+                                    elseif self.shape_type ~= "star" then
+                                        self.vel = vector.multiply(self.vel, 0.92)
+                                    end
+                                    self.object:set_velocity(self.vel)
+                                end
+
+                                local kb = ((self.shape_type == "shield") and 6 or 3) + (self.ench_knockback * 2)
+                                damage_target(obj, player, self.object, dmg, dir_norm, kb)
+
+                                fx_slash_hit(sample_pos, dir_norm, self.trail_hex)
+                                self:update_momentum_loot(sample_pos)
+                                if self:add_disk_wear(WEAR_UNIT * CONFIG.hit_wear_cost) then
+                                    return true -- Disk broke!
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return false
+    end,
+
     on_step = function(self, dtime)
         local pos = self.object:get_pos()
         if not pos then return end
@@ -511,7 +630,6 @@ core.register_entity(modname .. ":flying_disk", {
         if self.stuck then
             self.object:set_velocity({x = 0, y = 0, z = 0})
 
-            -- Automatic Loyalty / Star Core Return after sticking!
             if self.loyalty_level > 0 and player then
                 self.loyalty_timer = self.loyalty_timer - dtime
                 if self.loyalty_timer <= 0 then
@@ -523,7 +641,6 @@ core.register_entity(modname .. ":flying_disk", {
                 end
             end
 
-            -- Walk over the stuck disk to pick it up (just like Trident check_pickup!)
             for _, p in ipairs(core.get_connected_players()) do
                 local ppos = vector.add(p:get_pos(), {x = 0, y = 1.0, z = 0})
                 if vector.distance(pos, ppos) <= 1.65 then
@@ -544,18 +661,9 @@ core.register_entity(modname .. ":flying_disk", {
 
         self:update_momentum_loot(pos)
 
-        if CONFIG.parry_projectiles then
-            for _, obj in ipairs(core.get_objects_inside_radius(pos, 1.4)) do
-                if obj ~= self.object and obj ~= player and is_projectile_entity(obj:get_luaentity()) then
-                    deflect_projectile(obj, pos)
-                end
-            end
-        end
-
         -- 3. HOMING RETURN (TECH RECALL / LOYALTY / STAR CORE)
         if self.returning then
             if not player then
-                -- If owner logged off mid-return, stick in place
                 self.returning = false
                 self.stuck = true
                 self.object:set_velocity({x = 0, y = 0, z = 0})
@@ -570,24 +678,9 @@ core.register_entity(modname .. ":flying_disk", {
                 return
             end
 
-            -- Star Core & Loyalty slice through enemies on the return flight!
+            local next_ret_pos = vector.add(pos, vector.multiply(self.vel, dtime))
             if self.core_type == "star" or self.loyalty_level > 0 then
-                local ret_ray = core.raycast(pos, vector.add(pos, vector.multiply(self.vel, dtime)), true, false)
-                for pointed in ret_ray do
-                    if pointed.type == "object" and pointed.ref ~= self.object and pointed.ref ~= player then
-                        local obj = pointed.ref
-                        local ent = obj:get_luaentity()
-                        if not is_projectile_entity(ent) and not (ent and ent.name == "__builtin:item") then
-                            local id = tostring(obj)
-                            if not self.hit_mobs[id] then
-                                self.hit_mobs[id] = true
-                                local ret_dmg = CONFIG.base_damage + (self.ench_sharpness * 1.5)
-                                obj:punch(player, 1.0, { full_punch_interval = 1.0, damage_groups = {fleshy = ret_dmg} }, vector.normalize(self.vel))
-                                fx_slash_hit(pointed.intersection_point or pos, vector.normalize(self.vel), self.trail_hex)
-                            end
-                        end
-                    end
-                end
+                if self:check_wide_blade_hits(pos, next_ret_pos, player, true) then return end
             end
 
             local ret_spd = CONFIG.return_speed + (self.loyalty_level * 4)
@@ -605,56 +698,27 @@ core.register_entity(modname .. ":flying_disk", {
         self.object:set_velocity(self.vel)
 
         local step_vec = vector.multiply(self.vel, dtime)
-        local ray = core.raycast(pos, vector.add(pos, step_vec), true, false)
+        local next_pos = vector.add(pos, step_vec)
 
+        -- Sweep the full 3D blade width against mobs & projectiles along this step!
+        if self:check_wide_blade_hits(pos, next_pos, player, false) then
+            return
+        end
+
+        -- Raycast strictly for nodes/walls (objects = false)
+        local ray = core.raycast(pos, next_pos, false, false)
         for pointed in ray do
-            if pointed.type == "object" and pointed.ref ~= self.object and pointed.ref ~= player then
-                local obj = pointed.ref
-                local ent = obj:get_luaentity()
-                if is_projectile_entity(ent) then
-                    deflect_projectile(obj, pos)
-                elseif not (ent and ent.name == "__builtin:item") then
-                    local id = tostring(obj)
-                    if not self.hit_mobs[id] then
-                        self.hit_mobs[id] = true
-
-                        local dmg = CONFIG.base_damage
-                            + math.floor(self.bounces * CONFIG.bounce_damage_bonus)
-                            + (self.ench_sharpness * 1.5)
-                            + (self.ench_impaling * 2.0)
-
-                        if self.shape_type == "sawtooth" then
-                            dmg = dmg + 2
-                            self.vel = vector.multiply(self.vel, 0.85)
-                        elseif self.shape_type ~= "star" then
-                            -- Normal disks lose a little momentum slicing through mobs; Star pierces cleanly
-                            self.vel = vector.multiply(self.vel, 0.92)
-                        end
-                        self.object:set_velocity(self.vel)
-
-                        local kb = ((self.shape_type == "shield") and 6 or 3) + (self.ench_knockback * 2)
-                        if player then
-                            obj:punch(player, 1.0, { full_punch_interval = 1.0, damage_groups = {fleshy = dmg} }, vector.multiply(vector.normalize(self.vel), kb))
-                        end
-
-                        fx_slash_hit(pointed.intersection_point or pos, vector.normalize(self.vel), self.trail_hex)
-                        self:update_momentum_loot(pointed.intersection_point or pos)
-                        if self:add_disk_wear(WEAR_UNIT * CONFIG.hit_wear_cost) then return end
-                    end
-                end
-
-            elseif pointed.type == "node" then
+            if pointed.type == "node" then
                 local npos = pointed.under
                 local nname = core.get_node(npos).name
 
                 if player then
-                    trigger_redstone_node(npos, player, pointed)
+                    trigger_redstone_node(npos, player, pointed, self)
                 end
 
                 if core.registered_nodes[nname] and core.registered_nodes[nname].walkable then
                     local hit_p = pointed.intersection_point or pos
 
-                    -- Fragile block shatter (loses some speed, keeps flying!)
                     if CONFIG.break_fragile and is_breakable_node(nname) then
                         if not core.is_protected(npos, self.thrower_name or "") then
                             core.dig_node(npos)
@@ -668,13 +732,12 @@ core.register_entity(modname .. ":flying_disk", {
                         return
                     end
 
-                    -- CORE: Cross (Smasher) Wall Shockwave
                     if self.core_type == "cross" and player then
                         fx_shockwave(hit_p, self.trail_hex)
                         for _, obj in ipairs(core.get_objects_inside_radius(hit_p, 3)) do
                             local ent = obj:get_luaentity()
                             if obj ~= player and not is_projectile_entity(ent) and not (ent and ent.name == "__builtin:item") then
-                                obj:punch(player, 1.0, { full_punch_interval = 1.0, damage_groups = {fleshy = 3} }, nil)
+                                damage_target(obj, player, self.object, 3, {x = 0, y = 0.5, z = 0}, 3)
                             end
                         end
                     end
@@ -682,13 +745,12 @@ core.register_entity(modname .. ":flying_disk", {
                     local max_b = (self.shape_type == "chakram") and (CONFIG.max_bounces + 2) or CONFIG.max_bounces
                     local current_speed = vector.length(self.vel)
 
-                    -- IF MOMENTUM IS LOST OR MAX BOUNCES REACHED -> STICK INTO SURFACE LIKE A TRIDENT!
+                    -- STICK INTO SURFACE WHEN MOMENTUM RUNS OUT OR MAX BOUNCES REACHED
                     if self.bounces >= max_b or current_speed < CONFIG.min_stick_speed then
                         fx_wall_sparks(hit_p, pointed.intersection_normal, self.trail_hex)
                         self.stuck = true
                         self.vel = {x = 0, y = 0, z = 0}
                         self.object:set_velocity(self.vel)
-                        -- Slightly embed blade edge into the block surface
                         local n = pointed.intersection_normal or {x = 0, y = 1, z = 0}
                         self.object:set_pos(vector.add(hit_p, vector.multiply(n, 0.08)))
                         self.loyalty_timer = math.max(0.2, 0.8 - (self.loyalty_level * 0.2))
@@ -696,7 +758,6 @@ core.register_entity(modname .. ":flying_disk", {
                         return
                     end
 
-                    -- Otherwise, Ricochet Bounce & lose some momentum
                     local n = pointed.intersection_normal
                     if n and (n.x ~= 0 or n.y ~= 0 or n.z ~= 0) then
                         self.vel = vector.subtract(self.vel, vector.multiply(n, 2 * vector.dot(self.vel, n)))
@@ -741,7 +802,7 @@ local function show_forge_formspec(player, stack, info_text)
         "box[3.4,0.8;6.1,1.5;#0f172a]",
         string.format("textarea[3.6,0.9;5.7,1.3;;;%s]", core.formspec_escape(txt)),
 
-        "label[3.4,2.5;2. Core Module (Requires Gold/Redstone):]",
+        "label[3.4,2.5;2. Core Module (Special Ability):]",
         "button[3.4,2.7;2.8,0.7;core_open;Hollow\n" .. UPGRADE_COSTS.core_open.label .. "]",
         "button[6.4,2.7;3.0,0.7;core_star;Star\n" .. UPGRADE_COSTS.core_star.label .. "]",
         "button[3.4,3.5;2.8,0.7;core_cross;Cross\n" .. UPGRADE_COSTS.core_cross.label .. "]",
@@ -750,13 +811,13 @@ local function show_forge_formspec(player, stack, info_text)
         string.format("label[3.4,4.5;Durability: %d%%]", math.floor(((65535 - stack:get_wear()) / 65535) * 100)),
         "button[5.2,4.3;4.2,0.65;repair_disk;Hammer Repair (1x Ingot)]",
 
-        "label[0.5,4.8;1. Outer Shell (Requires Iron/Steel):]",
+        "label[0.5,4.8;1. Outer Shell (Flight Physics):]",
         "button[0.5,5.1;2.2,0.7;shape_chakram;Chakram\n" .. UPGRADE_COSTS.shape_chakram.label .. "]",
         "button[2.8,5.1;2.2,0.7;shape_shield;Shield\n" .. UPGRADE_COSTS.shape_shield.label .. "]",
         "button[5.1,5.1;2.2,0.7;shape_sawtooth;Sawtooth\n" .. UPGRADE_COSTS.shape_sawtooth.label .. "]",
         "button[7.4,5.1;2.0,0.7;shape_star;Shuriken\n" .. UPGRADE_COSTS.shape_star.label .. "]",
 
-        "label[0.5,6.2;3. Structural Alloy (Requires Dyes):]",
+        "label[0.5,6.2;3. Structural Alloy (Dyes):]",
     }
 
     for i, c in ipairs(COLORS) do
@@ -790,7 +851,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     local function attempt_upgrade(key, current_val, new_val)
         if current_val == new_val then return current_val, false end
         local cost = UPGRADE_COSTS[key]
-        if cost and cost.count > 0 then
+        if cost and cost.count > 0 and cost.item ~= "" then
             local cost_stack = ItemStack(cost.item .. " " .. cost.count)
             if not core.is_creative_enabled(player:get_player_name()) and not inv:contains_item("main", cost_stack) then
                 core.chat_send_player(player:get_player_name(), "Missing materials: You need " .. cost.count .. "x " .. cost.item)
@@ -830,7 +891,6 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         meta:set_string("description", string.format("%s %s\nPassives: %s, %s\nLeft-Click: Throw | Right-Click: Tech Recall\n(Sneak + Right-Click %s to Forge)",
             get_color_def(col).name, SHAPE_NAMES[shape], p_s, p_c, is_mcl and "Anvil" or "Steel Block"))
 
-        -- Refresh Mineclonia enchantment lore if enchanted
         if is_mcl and mcl_enchanting and mcl_enchanting.update_enchanted_itemstring then
             mcl_enchanting.update_enchanted_itemstring(stack)
         end
@@ -849,7 +909,6 @@ local function activate_shield_ability(player, shape)
     local r = (shape == "shield") and (CONFIG.hand_parry_radius * 2) or CONFIG.hand_parry_radius
     local did_parry = false
 
-    -- Visual Shield Wave
     fx_shockwave(vector.add(ppos, vector.multiply(look, 1.2)), "#38bdf8")
     core.sound_play(snd_bounce, {pos = ppos, gain = 1.0, pitch = 1.4}, true)
 
@@ -862,9 +921,7 @@ local function activate_shield_ability(player, shape)
                     deflect_projectile(obj, ppos)
                     did_parry = true
                 elseif shape == "shield" and not (ent and ent.name == "__builtin:item") and not (ent and ent.name == modname .. ":flying_disk") then
-                    -- Shield Bash knocks back close enemies!
-                    obj:add_velocity(vector.multiply(to_obj, 12))
-                    obj:punch(player, 1.0, { full_punch_interval = 1.0, damage_groups = {fleshy = 3} }, to_obj)
+                    damage_target(obj, player, player, 3, to_obj, 8)
                     did_parry = true
                 end
             end
@@ -873,11 +930,9 @@ local function activate_shield_ability(player, shape)
     return did_parry
 end
 
--- LEFT-CLICK: Throw Disk (or Activate Shield if Sneaking with Shield Shape!)
 local function left_click_disk(stack, player, pointed_thing)
     local shape, core_t, col = get_disk_meta(stack)
 
-    -- Requirement 3: Sneak + Left-Click while holding Shield activates the Shield!
     if player:get_player_control().sneak and shape == "shield" then
         activate_shield_ability(player, shape)
         return stack
@@ -886,7 +941,6 @@ local function left_click_disk(stack, player, pointed_thing)
     local pname = player:get_player_name()
     local creative = core.is_creative_enabled(pname)
 
-    -- Read Mineclonia Enchantments (Including Loyalty & Impaling from mcl_tridents!)
     local ench_data = {sharp = 0, unbreak = 0, knock = 0, loyalty = 0, impaling = 0}
     if is_mcl and core.get_modpath("mcl_enchanting") and mcl_enchanting then
         ench_data.sharp = mcl_enchanting.get_enchantment(stack, "sharpness") or 0
@@ -896,7 +950,6 @@ local function left_click_disk(stack, player, pointed_thing)
         ench_data.impaling = mcl_enchanting.get_enchantment(stack, "impaling") or 0
     end
 
-    -- Take the item from the player's hand to launch it into the world (Trident style)
     local thrown_stack = ItemStack(stack)
     if not creative then
         local throw_wear = math.floor((WEAR_UNIT * CONFIG.throw_wear_cost) / (ench_data.unbreak + 1))
@@ -928,7 +981,6 @@ local function left_click_disk(stack, player, pointed_thing)
     return stack
 end
 
--- RIGHT-CLICK: Open Anvil Forge OR Recall Tech Disk!
 local function right_click_disk(stack, player, pointed_thing)
     if pointed_thing and pointed_thing.type == "node" and player:get_player_control().sneak and is_forge_node(core.get_node(pointed_thing.under).name) then
         show_forge_formspec(player, stack)
@@ -939,7 +991,7 @@ local function right_click_disk(stack, player, pointed_thing)
 end
 
 -- ============================================================================
--- REGISTER TOOL VARIANTS (WITH TRIDENT & SWORD ENCHANTING GROUPS!)
+-- REGISTER TOOL VARIANTS
 -- ============================================================================
 for _, shape in ipairs(SHAPES) do
     for _, core_t in ipairs(CORES) do
@@ -961,9 +1013,9 @@ for _, shape in ipairs(SHAPES) do
                 },
                 groups = {
                     weapon = 1,
-                    sword = 1,          -- Unlocks Sharpness, Knockback, Unbreaking
-                    trident = 1,        -- Unlocks Loyalty & Impaling in Mineclonia!
-                    enchantability = 15,-- Required by Mineclonia Enchanting Table & Anvil!
+                    sword = 1,
+                    disk_weapon = 1,
+                    enchantability = 15,
                     rarity = 2,
                     offhand_item = 1,
                     disable_repair = 1,
@@ -977,8 +1029,22 @@ for _, shape in ipairs(SHAPES) do
     end
 end
 
+core.register_on_mods_loaded(function()
+    if is_mcl and core.get_modpath("mcl_enchanting") and mcl_enchanting and mcl_enchanting.enchantments then
+        for _, ench_name in ipairs({"loyalty", "impaling"}) do
+            local ench_def = mcl_enchanting.enchantments[ench_name]
+            if ench_def then
+                ench_def.primary = ench_def.primary or {}
+                ench_def.primary.disk_weapon = true
+                ench_def.secondary = ench_def.secondary or {}
+                ench_def.secondary.disk_weapon = true
+            end
+        end
+    end
+end)
+
 -- ============================================================================
--- GLOBAL RIGHT-CLICK RECALL (RECALL TECH DISK EVEN WITH EMPTY HAND!)
+-- GLOBAL RIGHT-CLICK RECALL & OFF-HAND THROW
 -- ============================================================================
 local rmb_held = {}
 core.register_globalstep(function(dtime)
@@ -988,8 +1054,17 @@ core.register_globalstep(function(dtime)
         if ctrl.RMB then
             if not rmb_held[pname] then
                 rmb_held[pname] = true
-                -- Recall any thrown Tech Core disk on Right-Click!
-                recall_tech_disks(player)
+                if not recall_tech_disks(player) then
+                    if not is_disk_item(player:get_wielded_item():get_name()) then
+                        local inv = player:get_inventory()
+                        if inv then
+                            local o_stack = inv:get_stack("offhand", 1)
+                            if o_stack and is_disk_item(o_stack:get_name()) then
+                                inv:set_stack("offhand", 1, left_click_disk(o_stack, player, nil))
+                            end
+                        end
+                    end
+                end
             end
         else
             rmb_held[pname] = false
